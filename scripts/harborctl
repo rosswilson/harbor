@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""Harbor's dependency-free CLI for local use and CI runners."""
+
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+BASE = os.getenv("HARBOR_URL", "http://localhost:9090").rstrip("/")
+TOKEN = os.getenv("HARBOR_TOKEN", "harbor-local-dev")
+
+
+def request(path, method="GET", payload=None, key=None):
+    headers = {"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"}
+    if key:
+        headers["Idempotency-Key"] = key
+    req = urllib.request.Request(
+        BASE + "/api/" + path,
+        headers=headers,
+        method=method,
+        data=None if payload is None else json.dumps(payload).encode(),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        try:
+            message = json.load(error).get("error", str(error))
+        except Exception:
+            message = str(error)
+        raise RuntimeError(message) from error
+
+
+def wait_for(rollout_id, timeout):
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        result = request("rollouts/" + rollout_id)
+        if result["status"] != last:
+            print(result["status"] + ": " + result["message"], file=sys.stderr)
+            last = result["status"]
+        if last == "succeeded":
+            return result
+        if last in ("failed", "rolled_back", "cancelled"):
+            raise RuntimeError("Release ended in " + last)
+        time.sleep(2)
+    raise RuntimeError(
+        "Timed out waiting; release remains active. Inspect or cancel " + rollout_id
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("state", help="Get all desired and observed state")
+    rev = sub.add_parser("revision", help="Register an immutable revision")
+    rev.add_argument("id")
+    rev.add_argument("--image", required=True)
+    rev.add_argument("--port", type=int, default=8080)
+    rev.add_argument("--health-path", default="/")
+    rev.add_argument("--env", action="append", default=[], metavar="KEY=VALUE")
+    deploy = sub.add_parser("deploy", help="Run a revision without assigning traffic")
+    deploy.add_argument("id")
+    deploy.add_argument("--revision", required=True)
+    deploy.add_argument("--cell", required=True)
+    deploy.add_argument("--replicas", type=int, default=2)
+    release = sub.add_parser("release", help="Change one tenant's assignment")
+    release.add_argument("tenant")
+    release.add_argument("deployment")
+    release.add_argument("--observe-seconds", type=int, default=20)
+    release.add_argument("--key", help="Idempotency key; use a stable pipeline run ID")
+    release.add_argument("--wait", action="store_true")
+    release.add_argument("--timeout", type=int, default=300)
+    for name in ("approve", "cancel", "rollback", "retire"):
+        cmd = sub.add_parser(name)
+        cmd.add_argument(
+            "id",
+            help="Tenant ID for rollback, deployment ID for retire, otherwise rollout ID",
+        )
+    wait = sub.add_parser("wait", help="Wait for an existing rollout")
+    wait.add_argument("id")
+    wait.add_argument("--timeout", type=int, default=300)
+    args = parser.parse_args()
+    if args.command == "state":
+        result = request("state")
+    elif args.command == "revision":
+        env = {}
+        for item in args.env:
+            key, separator, value = item.partition("=")
+            if not separator or not key:
+                parser.error("--env must be KEY=VALUE")
+            env[key] = value
+        result = request(
+            "revisions",
+            "POST",
+            {
+                "id": args.id,
+                "image": args.image,
+                "port": args.port,
+                "healthPath": args.health_path,
+                "env": env,
+            },
+        )
+    elif args.command == "deploy":
+        result = request(
+            "deployments",
+            "POST",
+            {
+                "id": args.id,
+                "revision": args.revision,
+                "cell": args.cell,
+                "replicas": args.replicas,
+            },
+        )
+    elif args.command == "release":
+        result = request(
+            "rollouts",
+            "POST",
+            {
+                "tenant": args.tenant,
+                "deployment": args.deployment,
+                "observeSeconds": args.observe_seconds,
+            },
+            args.key,
+        )
+        if args.wait:
+            result = wait_for(result["id"], args.timeout)
+    elif args.command == "wait":
+        result = wait_for(args.id, args.timeout)
+    elif args.command in ("approve", "cancel"):
+        result = request("rollouts/" + args.id + "/" + args.command, "POST", {})
+    elif args.command == "rollback":
+        result = request("tenants/" + args.id + "/rollback", "POST", {})
+    else:
+        result = request("deployments/" + args.id, "DELETE")
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, urllib.error.URLError) as error:
+        print("harborctl: " + str(error), file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        sys.exit(130)

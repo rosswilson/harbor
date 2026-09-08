@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{.Tenant}} · Harbor destination</title>
+    <style>
+      body {
+        background: #0c1525;
+        color: #eaf1fb;
+        font: 17px system-ui;
+        margin: 0;
+        padding: 8vw;
+      }
+      main {
+        max-width: 820px;
+      }
+      small {
+        color: #65dcc9;
+        letter-spacing: 0.15em;
+      }
+      h1 {
+        font-size: clamp(40px, 7vw, 76px);
+        letter-spacing: -0.06em;
+        margin: 24px 0;
+      }
+      p {
+        color: #a6b9d1;
+        line-height: 1.6;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 18px;
+        border-top: 1px solid #304056;
+        padding-top: 32px;
+      }
+      dt {
+        color: #9bacc2;
+      }
+      dd {
+        margin: 0;
+        font-family: monospace;
+        overflow-wrap: anywhere;
+      }
+      .pill {
+        display: inline-block;
+        border: 1px solid #65dcc9;
+        color: #65dcc9;
+        padding: 8px 14px;
+        border-radius: 30px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <small>HARBOR / LIVE DESTINATION</small>
+      <h1>Hello from {{.Revision}}.</h1>
+      <p>
+        This response came from a real container, through your tenant’s assigned route. Refresh to
+        see another replica.
+      </p>
+      <span class="pill">{{.Tenant}}</span>
+      <dl>
+        <dt>Deployment</dt>
+        <dd>{{.Deployment}}</dd>
+        <dt>Container</dt>
+        <dd>{{.Hostname}}</dd>
+        <dt>Cell</dt>
+        <dd>{{.Cell}}</dd>
+        <dt>Requested host</dt>
+        <dd>{{.Host}}</dd>
+        <dt>Served at</dt>
+        <dd>{{.Time}}</dd>
+      </dl>
+    </main>
+  </body>
+</html>

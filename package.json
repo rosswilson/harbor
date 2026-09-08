@@ -1,0 +1,17 @@
+{
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.6",
+    "stylelint": "17.15.0",
+    "stylelint-config-standard": "40.0.0"
+  },
+  "name": "harbor-quality-tools",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . && stylelint \"web/**/*.css\""
+  }
+}

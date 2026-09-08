@@ -1,0 +1,6 @@
+extends: default
+rules:
+  document-start: disable
+  line-length: disable # Prettier owns wrapping, including long Compose commands.
+  braces: { min-spaces-inside: 0, max-spaces-inside: 1 }
+  comments: { min-spaces-from-content: 1 }

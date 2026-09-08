@@ -1,0 +1,96 @@
+name: harbor
+services:
+  demo-image:
+    image: harbor-demo:local
+    build:
+      context: .
+      target: demo
+    profiles: [build]
+  controlplane:
+    image: harbor-controlplane:local
+    build:
+      context: .
+      target: controlplane
+    container_name: harbor-controlplane
+    restart: unless-stopped
+    environment:
+      HARBOR_TOKEN: ${HARBOR_TOKEN:-harbor-local-dev}
+      DOCKER_NETWORK: harbor-runtime
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - state:/data
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [runtime]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://localhost:9090/healthz]
+      interval: 5s
+      timeout: 2s
+      retries: 12
+  gateway-a:
+    image: envoyproxy/envoy:v1.33.2
+    container_name: harbor-gateway-a
+    hostname: gateway-a
+    restart: unless-stopped
+    labels:
+      harbor.owner: harbor-lab
+    command:
+      [
+        -c,
+        /etc/envoy/envoy.yaml,
+        --service-node,
+        gateway-a,
+        --service-cluster,
+        harbor-gateways,
+        --concurrency,
+        "2",
+        --log-level,
+        warn,
+      ]
+    volumes:
+      - ./infra/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "127.0.0.1:18081:8080"
+    networks: [runtime]
+    depends_on: [controlplane]
+  gateway-b:
+    image: envoyproxy/envoy:v1.33.2
+    container_name: harbor-gateway-b
+    hostname: gateway-b
+    restart: unless-stopped
+    labels:
+      harbor.owner: harbor-lab
+    command:
+      [
+        -c,
+        /etc/envoy/envoy.yaml,
+        --service-node,
+        gateway-b,
+        --service-cluster,
+        harbor-gateways,
+        --concurrency,
+        "2",
+        --log-level,
+        warn,
+      ]
+    volumes:
+      - ./infra/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "127.0.0.1:18082:8080"
+    networks: [runtime]
+    depends_on: [controlplane]
+  edge:
+    image: haproxy:3.0-alpine
+    container_name: harbor-edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./infra/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks: [runtime]
+    depends_on: [gateway-a, gateway-b]
+networks:
+  runtime:
+    name: harbor-runtime
+volumes:
+  state:

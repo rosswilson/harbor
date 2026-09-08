@@ -1,0 +1,10 @@
+.git
+work
+node_modules
+tests
+*.log
+.env
+.venv
+.ruff_cache
+**/__pycache__
+.DS_Store

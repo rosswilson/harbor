@@ -1,0 +1,6 @@
+node_modules/
+work/
+go.sum
+package-lock.json
+__pycache__/
+.ruff_cache/
